@@ -1,0 +1,64 @@
+---
+title: "censo"
+author: "Christian Castro"
+date: "24-05-2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R 
+
+¿Qué es un archivo SPS?
+
+SPS es Archivo de programa utilizado por SPSS, una aplicación de análisis estadístico; guardado en un formato de texto sin formato y contiene instrucciones escritas usando la sintaxis de SPSS; generalmente desarrollado con SPSS Syntax Editor; utilizado para manipular conjuntos de datos y automatizar análisis estadísticos. 
+
+
+
+![alt text here](lecturasspss.JPG)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+library(foreign)
+#file.choose()
+```
+
+```{r}
+#x=spss.fixed.file(file=data.dat,columns.file=microdatos/Microdato_Censo2017-Personas.sps,varlab.file=input.sps)
+
+```
+
+
+```{python}
+
+```
+
+
+
+
+
+
+
+
+
+
