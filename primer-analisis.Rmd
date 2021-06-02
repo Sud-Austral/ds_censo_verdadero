@@ -1,0 +1,156 @@
+---
+title: Analisis de archivos raster
+author:
+- name: VE-CC-CF
+  affiliation: DataIntelligence
+subtitle: | 
+
+date: "Lunes 31-05-2021"
+
+abstract: |
+  Generación de tablas de contingencia báicas en el Censo de 2017
+ 
+header-includes:
+   - \usepackage[]{babel}
+
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(leaflet)
+library(writexl)
+library(rgee)
+library(mapedit) # (OPTIONAL) Interactive editing of vector data
+library(raster)  # Manipulate raster data
+library(scales)  # Scale functions for visualization
+library(cptcity)  # cptcity color gradients!
+#library(tmap)    # Thematic Map Visualization <3
+library(kableExtra)
+library(slickR)
+library(ggiraph)
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(sf)
+library(raster)
+library(sp)
+library(rgdal)
+```
+
+
+## 1 Se lee el microdato con la librería rio. 
+
+
+```{r}
+library("rio")
+x <- import("Microdato_Censo2017-Personas.csv")
+```
+
+
+## 2 Exponemos los primeros 1000 datos
+
+```{r}
+x_1000 <- x[c(1:1000),]
+kbl(x_1000) %>%
+kable_styling(bootstrap_options = c("striped", "hover")) %>%
+kable_paper() %>%
+scroll_box(width = "100%", height = "300px")
+```
+
+## 3 Leemos la cantidad de personas
+
+
+```{r}
+sumadepersonas <- nrow(x)
+sumadepersonas
+```
+
+## 4 Sumamos los elementos de la columna p08
+
+
+```{r}
+sum(x$P08)
+```
+
+## 5 Ejecutamos un SQL dentro de R
+
+```{r}
+library(sqldf)
+sqldf('SELECT * FROM x_1000 WHERE P08 == 2')
+```
+son 17,574,003 filas, asi que subseteamos a 1000
+
+## 5 Logica para la construcción de la clave
+
+```{r}
+# bd <- readRDS("x_sub_1000.rds")
+# codigos <- bd$ZC_LOC
+
+codigos <- x$ZC_LOC
+
+rango <- seq(1:nrow(x))
+cadena<- paste("00",codigos[rango], sep = "")
+cadena <- substr(cadena,(nchar(cadena)[rango])-(4-2),5)
+codigos <- as.data.frame(codigos)
+cadena <- as.data.frame(cadena)
+cadena_c <- cbind(codigos,cadena)
+
+x$x <- paste(x$COMUNA, x$DC, x$AREA,  cadena_c$cadena, sep="")
+```
+
+
+## 6 Veamos la clave
+
+```{r}
+
+x_1000 <- x[c(1:1000),]
+kbl(x_1000) %>%
+kable_styling(bootstrap_options = c("striped", "hover")) %>%
+kable_paper() %>%
+scroll_box(width = "100%", height = "300px")
+```
+
+## 7 Generación de las tablas de contingencia. Primero se establece la categoría sobre la que se va a agrupar y luego la variable sobre las que se van a calcular las frecuencias.
+
+
+```{r}
+tabla_abs<-table(x_sub_1000$x, x_sub_1000$P10, useNA = "no")
+tabla_abs
+```
+
+
+
+
+Ejemplo de SQL bajo R
+
+
+```{r}
+library(sqldf)
+sqldf('SELECT COMUNA FROM x_sub_1000 WHERE ESCOLARIDAD > 8 ORDER BY COMUNA ASC')
+```
+
+
+```{r}
+# read.csv2("censo/csv manzana/microdato_censo2017-geografia_manzanas.csv")
+```
+
+
+```{r}
+# read.csv2("censo/csv manzana/censo2017_manzanas (2).csv")
+```
+
+
+
+
+
+
+
+
+
+

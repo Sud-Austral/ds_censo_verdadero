@@ -1,0 +1,1145 @@
+---
+title: Análisis de frecuencias en el Censo de Personas 2017 de Chile
+author:
+- name: VE-CC-CF
+  affiliation: DataIntelligence
+subtitle: | 
+
+date: "Miércoles 1-06-2021"
+
+abstract: |
+  Construímos un código para los registros, tablas de contingencia básicas para las preguntas del Censo del 2017 y aplicaciones en unas comunas.
+ 
+header-includes:
+   - \usepackage[]{babel}
+
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(leaflet)
+library(writexl)
+library(rgee)
+library(mapedit) # (OPTIONAL) Interactive editing of vector data
+library(raster)  # Manipulate raster data
+library(scales)  # Scale functions for visualization
+library(cptcity)  # cptcity color gradients!
+#library(tmap)    # Thematic Map Visualization <3
+library(kableExtra)
+library(slickR)
+library(ggiraph)
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(sf)
+library(raster)
+library(sp)
+library(rgdal)
+```
+
+# Parte I: Construcción de la clave
+
+### 1 Se lee el microdato Censo 2017 csv con la función import de la librería rio. 
+
+
+```{r}
+library("rio")
+x <- import("Microdato_Censo2017-Personas.csv")
+```
+
+Hacemos un subset para trabajar mas rápido:
+
+```{r}
+# x <- x[c(1:10000),]
+```
+
+El código se construye uniendo los siguientes elementos de la base de datos
+
+COMUNA    : Se mantiene igual.
+DC        : Siempre debe tener dos digitos anteponiendo un cero si tiene uno.
+AREA      : Se mantiene igual.
+ZC_LOC    : Siempre debe tener tres digitos anteponiendo un cero si tiene dos y dos si tiene uno.
+
+### 2 Analicemos la estructura del código de Comuna:
+
+```{r}
+unique(x$COMUNA)
+```
+
+* Vemos que algunos códigos tienen 5 digitos y otros 4. <span style="color:red"> Vamos a dejar ésto inalterado </span>  . Sin embargo, añadimos un trozo de código si en el futuro se desea agregar un cero previo a las comunas de 4 dígitos para homologar.
+
+```{r}
+# recogemos el campo Comuna:
+codigos <- x$COMUNA
+# construimos una secuencia llamada rango del 1 al total de filas del dataset:
+rango <- seq(1:nrow(x))
+# Creamos un string que agrega un cero a todos los registros:
+cadena<- paste("0",codigos[rango], sep = "")
+
+# El string cadena tiene o 5 o 6 digitos, los cuales siempre deben ser siempre 5 agregandole un cero al inicio de los que tienen 4.
+# Para ello extraemos un substring de la cadena sobre todas las filas (rangos) comenzando desde el primero o el segundo y llegando siempre al 6.
+
+cadena <- substr(cadena,(nchar(cadena)[rango])-(4),6)
+codigos <- as.data.frame(codigos)
+cadena <- as.data.frame(cadena)
+comuna_corr <- cbind(codigos,cadena)
+```
+
+* Lo verificamos
+
+```{r}
+head(unique(comuna_corr$cadena),50)
+```
+
+
+
+### 3 Analicemos la estructura del código de DC:
+
+
+```{r}
+head(unique(x$DC),50)
+```
+
+Debemos agregar un cero a la izquierda a todos los códigos DC que contengan un dígito:
+
+```{r}
+# Le asignamos a la variable codigos, la variable DC del dataframe x:
+codigos <- x$DC
+
+# Creamos una secuencia llamada rango con toda la cantidad de registros del dataframe:
+rango <- seq(1:nrow(x))
+
+# Creamos un string que añade un cero a todos los codigos quedando algunos con dos dígitos y otros con tres: 
+cadena <- paste("0",codigos[rango], sep = "")
+
+# Ésta es la línea más importante del código. 
+# Si el string entrante contiene tres digitos, la función substr comenzaría desde la posición 2 a la 3, y si tiene 2, comenzaría desde la posición 1 a la 3, pero como no existe posición tres, llega a la 2.
+
+cadena <- substr(cadena,(nchar(cadena)[rango])-(1),(nchar(cadena)[rango]))
+
+codigos <- as.data.frame(codigos)
+cadena <- as.data.frame(cadena)
+dc <- cbind(codigos,cadena)
+
+```
+
+* Lo verificamos
+
+```{r}
+head(unique(dc$cadena),50)
+```
+
+### 4 Analicemos la estructura del código de zc_loc:
+
+```{r}
+a002 <- head(unique(x$ZC_LOC),50)
+
+kbl(a002) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "30%", height = "300px")
+```
+
+Deben todos los codigos poseer tres dígitos, agregándole un cero a los que tienen 2 y dos ceros a los que tienen uno.
+
+```{r}
+codigos <- x$ZC_LOC
+rango <- seq(1:nrow(x))
+cadena<- paste("00",codigos[rango], sep = "")
+cadena <- substr(cadena,(nchar(cadena)[rango])-(2),nchar(cadena)[rango])
+codigos <- as.data.frame(codigos)
+cadena <- as.data.frame(cadena)
+cadena_c <- cbind(codigos,cadena)
+
+```
+
+#### 6 lo verificamos
+
+
+```{r}
+head(unique(cadena_c$cadena),50)
+```
+
+
+
+### 7 Unimos nuestra nueva clave a nuestro dataframe original con el nombre de campo clave:
+
+```{r}
+x$clave <- paste(x$COMUNA, dc$cadena, x$AREA,  cadena_c$cadena, sep="")
+```
+
+* Verificamos para los primeros 50 registros y vemos que la última columna contiene  la clave.
+
+Recordemos que:
+
+COMUNA    : Se mantiene igual.\
+DC        : Siempre debe tener dos digitos anteponiendo un cero si tiene uno.\
+AREA      : Se mantiene igual.\
+ZC_LOC    : Siempre debe tener tres digitos anteponiendo un cero si tiene dos y dos si tiene uno.\
+
+```{r}
+tablamadre <- head(x,50)
+
+kbl(tablamadre) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+Observemos algunas claves:
+
+```{r}
+unicas <- unique(x$clave)
+codigos_unicos <- head(unicas,50)
+
+kbl(codigos_unicos) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+<br>
+<hr style="height:1px;border-width:1;color:Gray;background-color:Gray">
+
+
+# Parte II: Generación de las tablas de contingencia:
+
+El Censo 2017 contempla preguntas agrupadas por el prefijo P y un número. Comenzaremos con la P07:
+
+### P07 Relación de parentesco.
+
+La categoria 19: "Persona en operativo calle" no figura en la base de datos.
+
+```{r}
+tabla_P07 <- table(x$clave, x$P07, useNA = "no")
+
+colnames(tabla_P07) <- c("Jefe/a de hogar","Esposo/a o cónyuge","Conviviente por unión civil","Conviviente de hecho o pareja","Hijo/a","Hijo/a del cónyuge, conviviente o pareja","Hermano/a","Padre/madre","Cuñado/a","Suegro/a","Yerno/nuera","Nieto/a","Abuelo/a","Otro pariente","No pariente","Servicio doméstico puertas adentro","Persona en vivienda colectiva","Persona en tránsito","Persona en operativo calle")
+
+a001 <- head(tabla_P07,5)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+
+
+```{r}
+write.table(tabla_P07,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P07.xlsx")
+```
+
+<br>
+
+### P08 Sexo.
+
+```{r}
+tabla_P08 <- table(x$clave, x$P08, useNA = "no")
+colnames(tabla_P08) <- c("Hombre","Mujer")
+
+#write_xlsx(tabla_P08, "tabla_P08.xlsx")
+
+a_003 <- head(tabla_P08,50)
+kbl(a_003) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+
+x_003 <- as.data.frame(a_003)
+write_xlsx(x_003,"x_003.xlsx")
+
+```
+
+
+```{r}
+write.table(tabla_P08,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P08.xlsx")
+```
+
+<br>
+
+### P09 Edad.
+
+```{r}
+tabla_P09 <- table(x$clave, x$P09, useNA = "no")
+#write_xlsx(tabla_P09, "tabla_P09.xlsx")
+
+a_004 <- head(tabla_P09,50)
+
+kbl(a_004) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+```{r}
+write.table(tabla_P09,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P09.xlsx")
+```
+
+<br>
+
+### P10 Residencia habitual.
+
+```{r}
+tabla_P10 <- table(x$clave, x$P10, useNA = "no")
+colnames(tabla_P10) <- c("En esta vivienda","En otra vivienda","En otra comuna","En otro país","Missing")
+#write_xlsx(tabla_P10, "tabla_P10.xlsx")
+
+a_005 <- head(tabla_P10,50)
+
+kbl(a_005) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+```{r}
+write.table(tabla_P10,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P10.xlsx")
+```
+
+<br>
+
+## Demografía geográfica.
+
+### P10COMUNA Comuna de residencia habitual.
+
+98: No aplica
+99: Missing
+
+```{r}
+tabla_P10COMUNA <- table(x$clave, x$P10COMUNA)
+
+#write_xlsx(tabla_P10COMUNA, "tabla_P10COMUNA.xlsx")
+
+a_006 <- head(tabla_P10COMUNA,50)
+
+kbl(a_006) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P10COMUNA,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P10COMUNA.xlsx")
+```
+
+<br>
+
+### P11COMUNA Comuna de residencia de hace 5 años.
+
+
+```{r}
+tabla_P11COMUNA <- table(x$clave, x$P11COMUNA, useNA = "no")
+#write_xlsx(tabla_P11COMUNA, "tabla_P11COMUNA.xlsx")
+
+
+a_007 <- head(tabla_P11COMUNA,50)
+
+kbl(a_007) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P11COMUNA,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P11COMUNA.xlsx")
+```
+
+<br>
+
+### P12COMUNA Comuna de de nacimiento.
+
+```{r}
+tabla_P12COMUNA <- table(x$clave, x$P12COMUNA, useNA = "no")
+#write_xlsx(tabla_P12COMUNA, "tabla_P12COMUNA.xlsx")
+
+a_008 <- head(tabla_P12COMUNA,50)
+
+kbl(a_008) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P12COMUNA ,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P12COMUNA .xlsx")
+```
+
+### P10PAIS País de residencia habitual.
+
+```{r}
+tabla_P10PAIS <- table(x$clave, x$P10PAIS, useNA = "no")
+
+#write_xlsx(tabla_P10PAIS, "tabla_P10PAIS.xlsx")
+
+a_010 <- head(tabla_P10PAIS,50)
+
+kbl(a_010) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P10PAIS ,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P10PAIS.xlsx")
+```
+
+<br>
+
+### P11PAIS País de residencia hace 5 años.
+
+
+```{r}
+tabla_P11PAIS <- table(x$clave, x$P11PAIS, useNA = "no")
+#write_xlsx(tabla_P11PAIS, "tabla_P11PAIS.xlsx")
+
+a_011 <- head(tabla_P11PAIS,50)
+
+kbl(a_011) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+```{r}
+write.table(tabla_P11PAIS,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P11PAIS.xlsx")
+```
+
+<br>
+
+### P12PAIS País de nacimiento.
+
+
+```{r}
+tabla_P12PAIS <- table(x$clave, x$P12PAIS, useNA = "no")
+#write_xlsx(tabla_P12PAIS, "tabla_P12PAIS.xlsx")
+
+a_012 <- head(tabla_P12PAIS,50)
+
+kbl(a_012) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P12PAIS,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P12PAIS.xlsx")
+```
+
+<br>
+
+### P11 Residencia hace 5 años.
+
+
+```{r}
+tabla_P11 <- table(x$clave, x$P11, useNA = "no")
+
+colnames(tabla_P11) <- c("Aún no nacía","En esta comuna","En otra comuna","Perú","Argentina","Bolivia","Ecuador","Colombia","Otro","Missing")
+
+#write_xlsx(tabla_P11, "tabla_P11.xlsx")
+
+a_111 <- head(tabla_P11,50)
+
+kbl(a_111) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P11,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P11.xlsx")
+```
+
+<br>
+
+### P12 Lugar de nacimiento.
+
+
+```{r}
+tabla_P12 <- table(x$clave, x$P12, useNA = "no")
+
+colnames(tabla_P12) <- c("En esta comuna","En otra comuna","Perú","Argentina","Bolivia","Ecuador","Colombia","Otro","Missing")
+
+#write_xlsx(tabla_P12, "tabla_P12.xlsx")
+
+a_112 <- head(tabla_P12,50)
+
+kbl(a_112) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P12,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P12.xlsx")
+```
+
+### P12A_LLEGADA Año de llegada al país.
+
+```{r}
+tabla_P12A_LLEGADA <- table(x$clave, x$P12A_LLEGADA, useNA = "no")
+
+#write_xlsx(tabla_P12A_LLEGADA, "tabla_P12A_LLEGADA.xlsx")
+
+a_12a <- head(tabla_P12A_LLEGADA,50)
+
+kbl(a_12a) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P12A_LLEGADA,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P12A_LLEGADA.xlsx")
+```
+
+<br>
+
+### P12A_TRAMO Período de llegada al País.
+
+
+```{r}
+tabla_P12A_TRAMO <- table(x$clave, x$P12A_TRAMO, useNA = "no")
+
+colnames(tabla_P12A_TRAMO) <- c("Entre 2010 y 2017","Entre 2000 y 2009","Entre 1990 y 1999","Antes de 1990","No aplica", "Missing")
+
+#write_xlsx(tabla_P12A_TRAMO, "tabla_P12A_TRAMO.xlsx")
+
+a_p12at <- head(tabla_P12A_TRAMO,50)
+
+kbl(a_p12at) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P12A_TRAMO,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P12A_TRAMO.xlsx")
+```
+
+<br>
+
+### Educacion
+
+### P13 ¿Asiste actualmente a la educación formal?
+
+```{r}
+tabla_P13 <- table(x$clave, x$P13, useNA = "no")
+
+colnames(tabla_P13) <- c("Sí","No asiste actualmente","Nunca asistió","Missing")
+
+#write_xlsx(tabla_P10PAIS, "tabla_P10PAIS.xlsx")
+
+a_013 <- head(tabla_P13,50)
+
+kbl(a_013) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P13,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P13.xlsx")
+```
+
+<br>
+
+### P14 Curso o año más alto aprobado.
+
+```{r}
+tabla_P14 <- table(x$clave, x$P14, useNA = "no")
+
+colnames(tabla_P14) <- c( "0","1","2","3","4","5","6","7","8","No aplica","Missing")
+#write_xlsx(tabla_P10PAIS, "tabla_P10PAIS.xlsx")
+
+a_014 <- head(tabla_P14,50)
+
+kbl(a_014) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P14,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P14.xlsx")
+```
+
+<br>
+
+### P15 Nivel del curso más alto aprobado.
+
+
+```{r}
+tabla_P15 <- table(x$clave, x$P15, useNA = "no")
+
+colnames(tabla_P15) <- c( 
+
+"Sala cuna o jardín infantil","Prekínder","Kínder","Especial o diferencial","Educación básica","Primaria o preparatorio (sistema antiguo)","Científico-humanista","Técnica profesional","Humanidades (sistema antiguo)","Técnica comercial, industrial/normalista (sistema
+antiguo)","Técnico superior (1-3 años)","Profesional (4 o más años)","Magíster","Doctorado", "No aplica" , "Missing")
+
+
+#write_xlsx(tabla_P15, "tabla_P15.xlsx")
+
+a_015 <- head(tabla_P15,50)
+
+kbl(a_015) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P15,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P15.xlsx")
+```
+
+<br>
+
+### P15A Completó el nivel especificado.
+
+```{r}
+tabla_P15A <- table(x$clave, x$P15A, useNA = "no")
+
+colnames(tabla_P15A) <- c( 
+"Sí","No","No aplica","Missing")
+#write_xlsx(tabla_P15A, "tabla_P15A.xlsx")
+
+a_015 <- head(tabla_P15A,50)
+
+kbl(a_015) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P15A,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P15A.xlsx")
+```
+
+<br>
+
+## Etnia
+
+### P16 Se considera perteneciente a un pueblo indígena u originario.
+
+```{r}
+tabla_P16 <- table(x$clave, x$P16, useNA = "no")
+
+colnames(tabla_P16) <- c( 
+"Sí","No","Missing")
+
+
+#write_xlsx(tabla_P16, "tabla_P16.xlsx")
+
+a_P16 <- head(tabla_P16,50)
+
+kbl(a_P16) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+```{r}
+write.table(tabla_P16,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P16.xlsx")
+```
+
+<br>
+
+### Pueblo indígena u originario listado.
+
+
+```{r}
+tabla_P16A <- table(x$clave, x$P16A, useNA = "no")
+
+colnames(tabla_P16A) <- c( 
+"Mapuche","Aymara","Rapa Nui","Lican Antai","Quechua","Colla","Diaguita","Kawésqar","Yagán o Yamana","Otro","No aplica","Missing")
+
+#write_xlsx(tabla_P16A, "tabla_P16A.xlsx")
+
+a_P16A <- head(tabla_P16A,50)
+
+kbl(a_P16A) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+```{r}
+write.table(tabla_P16A,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P16A.xlsx")
+```
+
+<br>
+
+### P16A_OTRO Pueblo indígena u originario (Otro).
+
+Atencion: hay que correr este pedazo de codigo una vez se cargue la tabla original.
+
+```{r}
+tabla_P16A_OTRO <- table(x$clave, x$P16A_OTRO, useNA = "no")
+
+colnames(tabla_P16A_OTRO) <- c(
+"Lafquenche","Pehuenche","Huilliche","Picunche","Changos","Chonos","Ona","Tehuelches","Pueblos de América Latina","Pueblos del resto del mundo","Afrodescendiente","Otros pueblos presentes en el territorio nacional","Pueblo no declarado","No aplica","Missing")
+
+
+#write_xlsx(tabla_P16A_OTRO, "tabla_P16A_OTRO.xlsx")
+
+a_P16A_OTRO <- head(tabla_P16A_OTRO,50)
+
+kbl(a_P16A_OTRO) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+```{r}
+write.table(tabla_P16A_OTRO,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+write_xlsx(tabla,"tablas_2017_personas/tabla_P16A_OTRO.xlsx")
+```
+
+<br>
+
+## Trabajo
+
+### P17 Trabajó durante la semana pasada.
+
+```{r}
+tabla_P17 <- table(x$clave, x$P17, useNA = "no")
+
+colnames(tabla_P17) <- c( 
+"Por un pago en dinero o especies","Sin pago para un familiar","Tenía empleo pero estuvo de vacaciones, con
+licencia, en descanso laboral, etc.","Se encontraba buscando empleo","Estaba estudiando","Realizó quehaceres de su hogar","Es jubilado, pensionado o rentista","Otra situación","No aplica","Missing")
+
+#write_xlsx(tabla_P17, "tabla_P17.xlsx")
+
+kbl(tabla_P17) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+<br>
+
+### P18 Rama de actividad económica.
+
+Atencion: hay que correr este pedazo de codigo una vez se cargue la tabla original.
+
+```{r}
+tabla_P18 <- table(x$clave, x$P18, useNA = "no")
+
+# colnames(tabla_P18) <- c( "Agricultura, ganadería, silvicultura y pesca","Explotación de minas y canteras","Industrias manufactureras","Suministro de electricidad, gas, vapor y aire
+# acondicionado","Suministro de agua; evacuación de aguas residuales, gestión de desechos y
+# descontaminación","Construcción","Comercio al por mayor y al por menor; reparación
+# de vehículos automotores y motocicletas","Transporte y almacenamiento","Actividades de alojamiento y de servicios de
+# comidas","Información y comunicaciones","Actividades financieras y de seguros","Actividades inmobiliarias","Actividades profesionales, científicas y técnicas","Actividades de servicios administrativos y de apoyo","Administración pública y defensa; planes de
+# seguridad social de afiliación obligatoria","Enseñanza","Actividades de atención de la salud humana y de
+# asistencia social","Actividades artísticas, de entretenimiento y
+# recreativas","Otras actividades de servicios","Actividades de los hogares como empleadores;
+# actividades no diferenciadas de los hogares como productores de bienes y servicios para uso propio","Actividades de organizaciones y órganos
+# extraterritoriales","Rama no declarada","No aplica","Missing")
+
+#write_xlsx(tabla_P18, "tabla_P18.xlsx")
+
+a_P18 <- head(tabla_P18,50)
+
+kbl(a_P18) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+## Demografía
+
+### P19 Total hijos/as nacidos vivos.
+
+```{r}
+tabla_P19 <- table(x$clave, x$P19, useNA = "no")
+
+#write_xlsx(tabla_P15A, "tabla_P15A.xlsx")
+
+a_P19 <- head(tabla_P19,50)
+
+kbl(a_P19) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+<br>
+
+### P20 Total hijos/as actualmente vivos.
+
+
+```{r}
+tabla_P20 <- table(x$clave, x$P20, useNA = "no")
+#write_xlsx(tabla_P20, "tabla_P20.xlsx")
+
+a_P20 <- head(tabla_P20,50)
+
+kbl(a_P20) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+<br>
+
+### P21M Mes de nacimiento del último/a hijo/a.
+
+
+```{r}
+tabla_P21M <- table(x$clave, x$P21M, useNA = "no")
+#write_xlsx(tabla_P15A, "tabla_P15A.xlsx")
+
+a_P21M <- head(tabla_P21M,50)
+
+kbl(a_P21M) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+<br>
+
+### P21A Año de nacimiento del último/a hijo/a.
+
+
+```{r}
+tabla_P21A <- table(x$clave, x$P21A, useNA = "no")
+#write_xlsx(tabla_P21A, "tabla_P21A.xlsx")
+
+a_P21A <- head(tabla_P21A,50)
+
+kbl(a_P21A) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+## Migración
+
+### P10PAIS_GRUPO País de residencia habitual (grupo).
+
+Atencion: hay que correr este pedazo de codigo una vez se cargue la tabla original.
+
+```{r}
+tabla_P10PAIS_GRUPO <- table(x$clave, x$P10PAIS_GRUPO, useNA = "no")
+
+# colnames(tabla_P17) <- c( 
+# "África","Sudamérica","Oceanía","Antártida","Centroamérica","Norteamérica","Caribe","Argentina","Bolivia (Estado Plurinacional de)","Asia", "Europa","Colombia","Ecuador","Haití", "Perú", "Venezuela (República Bolivariana de)", "País no declarado", "No aplica","Missing")
+
+
+
+#write_xlsx(tabla_P10PAIS_GRUPO, "tabla_P10PAIS_GRUPO.xlsx")
+
+P10PAIS_GRUPO <- head(tabla_P10PAIS_GRUPO,50)
+
+kbl(P10PAIS_GRUPO) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### P11PAIS_GRUPO País de residencia hace 5 años (grupo).
+
+Atencion: hay que correr este pedazo de codigo una vez se cargue la tabla original.
+
+```{r}
+tabla_P11PAIS_GRUPO <- table(x$clave, x$P11PAIS_GRUPO, useNA = "no")
+
+# colnames(tabla_P17) <- c( 
+# "África","Sudamérica","Oceanía","Antártida","Centroamérica","Norteamérica","Caribe","Argentina","Bolivia (Estado Plurinacional de)","Asia", "Europa","Colombia","Ecuador","Haití", "Perú", "Venezuela (República Bolivariana de)", "País no declarado", "No aplica","Missing")
+
+#write_xlsx(tabla_P11PAIS_GRUPO, "tabla_P11PAIS_GRUPO.xlsx")
+
+a_P11PAIS_GRUPO <- head(tabla_P11PAIS_GRUPO,50)
+
+kbl(a_P11PAIS_GRUPO) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### P12PAIS_GRUPO País de nacimiento (grupo).
+
+Atencion: hay que correr este pedazo de codigo una vez se cargue la tabla original.
+
+```{r}
+tabla_P12PAIS_GRUPO <- table(x$clave, x$P12PAIS_GRUPO, useNA = "no")
+
+# colnames(tabla_P17) <- c( 
+# "África","Sudamérica","Oceanía","Antártida","Centroamérica","Norteamérica","Caribe","Argentina","Bolivia (Estado Plurinacional de)","Asia", "Europa","Colombia","Ecuador","Haití", "Perú", "Venezuela (República Bolivariana de)", "País no declarado", "No aplica","Missing")
+
+
+#write_xlsx(tabla_P12PAIS_GRUPO, "tabla_P12PAIS_GRUPO.xlsx")
+
+P12PAIS_GRUPO <- head(tabla_P12PAIS_GRUPO,50)
+
+kbl(P12PAIS_GRUPO) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+## Escolaridad
+ 
+### ESCOLARIDAD Años de escolaridad.
+
+
+```{r}
+tabla_ESCOLARIDAD <- table(x$clave, x$ESCOLARIDAD, useNA = "no")
+
+colnames(tabla_ESCOLARIDAD) <- c( 
+"1","2","3","4","5","6","7","8","9","10", "11","12","13","14", "15", "16", "17", "18", "19", "20", "21","No aplica","Missing")
+
+#write_xlsx(tabla_ESCOLARIDAD, "tabla_ESCOLARIDAD.xlsx")
+
+a_ESCOLARIDAD <- head(tabla_ESCOLARIDAD,50)
+
+kbl(a_ESCOLARIDAD) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### Pueblo indígena
+
+### P16A_GRUPO Pueblo indígena u originario (grupo).
+
+Atencion: hay que correr este pedazo de codigo una vez se cargue la tabla original.
+
+```{r}
+tabla_P16A_GRUPO <- table(x$clave, x$P16A_GRUPO, useNA = "no")
+
+# colnames(tabla_P16A_GRUPO) <- c( 
+# "Mapuche","Aymara","Rapa Nui","Lican Antai","Quechua","Colla","Diaguita","Kawésqar","Yagán o Yamana","Otro pueblo","No aplica","Missing")
+
+
+#write_xlsx(tabla_P16A_GRUPO, "tabla_P16A_GRUPO.xlsx")
+
+a_P16A_GRUPO <- head(tabla_P16A_GRUPO,50)
+
+kbl(a_P16A_GRUPO) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### Códigos territoriales
+
+### REGION_15R Códigos regiones a 15 regiones.
+
+
+```{r}
+tabla_REGION_15R <- table(x$clave, x$REGION_15R, useNA = "no")
+#write_xlsx(tabla_P15A, "tabla_P15A.xlsx")
+
+a_REGION_15R <- head(tabla_REGION_15R,50)
+
+kbl(a_REGION_15R) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### PROVINCIA_15R Códigos provincias a 15 regiones.
+
+
+```{r}
+tabla_PROVINCIA_15R <- table(x$clave, x$PROVINCIA_15R, useNA = "no")
+#write_xlsx(tabla_PROVINCIA_15R, "tabla_PROVINCIA_15R.xlsx")
+
+a_PROVINCIA_15R <- head(tabla_PROVINCIA_15R,50)
+
+kbl(a_PROVINCIA_15R) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### COMUNA_15R Códigos comunas a 15 regiones.
+
+
+```{r}
+tabla_COMUNA_15R <- table(x$clave, x$COMUNA_15R, useNA = "no")
+#write_xlsx(tabla_COMUNA_15R, "tabla_COMUNA_15R.xlsx")
+
+COMUNA_15R <- head(tabla_COMUNA_15R,50)
+
+kbl(COMUNA_15R) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+# Parte III: Análisis por comuna
+
+i Debemos simplemente seleccionar el codigo comunal correcto. No hay cabecera para el código, sólo nombre de fila.
+
+Obtengamos la suma para el campo P10:
+
+```{r}
+variable <- filter(x, x$COMUNA == 15202)
+variable <- sum(variable$P10)
+variable
+```
+
+Despleguemos los 5 primeros registros de la comuna 15202:
+
+```{r}
+variable1 <- filter(x, x$COMUNA == 15202)
+a_011 <- head(variable1,5)
+kbl(a_011) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+Crucemos con la relación de parentezco:
+
+```{r}
+tabla_P07_15202 <- table(variable1$clave, variable1$P07)
+
+```
+
+
+```{r}
+kbl(tabla_P07_15202) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+
+

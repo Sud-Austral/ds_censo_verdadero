@@ -1,0 +1,19 @@
+---
+title: "leer_etiquetas_spss"
+author: "CC"
+date: "02-06-2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R 
+
+```{r}
+library(haven)
+library(foreign)
+read.spss("microdatos/Microdato_Censo2017-Personas.sps")
+```
+
