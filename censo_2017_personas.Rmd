@@ -848,7 +848,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P17.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P17.xlsx")
 
 kbl(tabla_P17) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -882,7 +882,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P18.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P18.xlsx")
 
 a_P18 <- head(tabla_P18,50)
 
@@ -906,7 +906,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P19.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P19.xlsx")
 
 
 a_P19 <- head(tabla_P19,50)
@@ -931,7 +931,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P20.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P20.xlsx")
 
 
 a_P20 <- head(tabla_P20,50)
@@ -956,7 +956,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P21M.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P21M.xlsx")
 
 a_P21M <- head(tabla_P21M,50)
 
@@ -980,7 +980,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P21A.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P21A.xlsx")
 
 a_P21A <- head(tabla_P21A,50)
 
@@ -1010,7 +1010,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P10PAIS_GRUPO.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P10PAIS_GRUPO.xlsx")
 
 P10PAIS_GRUPO <- head(tabla_P10PAIS_GRUPO,50)
 
@@ -1037,7 +1037,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P11PAIS_GRUPO.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P11PAIS_GRUPO.xlsx")
 
 a_P11PAIS_GRUPO <- head(tabla_P11PAIS_GRUPO,50)
 
@@ -1065,7 +1065,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P12PAIS_GRUPO.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P12PAIS_GRUPO.xlsx")
 
 
 P12PAIS_GRUPO <- head(tabla_P12PAIS_GRUPO,50)
@@ -1094,7 +1094,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_ESCOLARIDAD.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_ESCOLARIDAD.xlsx")
 
 
 a_ESCOLARIDAD <- head(tabla_ESCOLARIDAD,50)
@@ -1125,7 +1125,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_P16A_GRUPO.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_P16A_GRUPO.xlsx")
 
 a_P16A_GRUPO <- head(tabla_P16A_GRUPO,50)
 
@@ -1151,7 +1151,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_REGION_15R.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_REGION_15R.xlsx")
 
 
 a_REGION_15R <- head(tabla_REGION_15R,50)
@@ -1176,7 +1176,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_PROVINCIA_15R.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_PROVINCIA_15R.xlsx")
 
 a_PROVINCIA_15R <- head(tabla_PROVINCIA_15R,50)
 
@@ -1200,7 +1200,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_COMUNA_15R.xlsx")
+write_xlsx(tabla, "tablas_2017_personas/tabla_COMUNA_15R.xlsx")
 
 COMUNA_15R <- head(tabla_COMUNA_15R,50)
 
