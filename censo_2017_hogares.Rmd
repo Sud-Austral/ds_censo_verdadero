@@ -1,11 +1,11 @@
 ---
-title: Análisis de frecuencias en el Censo de Personas 2017 de Chile
+title: Análisis de frecuencias en el Censo de Hogares 2017 de Chile
 author:
 - name: VE-CC-CF
   affiliation: DataIntelligence
 subtitle: | 
 
-date: "Miércoles 02-06-2021"
+date: "Jueves 03-06-2021"
 
 abstract: |
   Construímos un código para los registros, tablas de contingencia básicas para las preguntas del Censo del 2017 y algunos ejercicios sobre algunas comunas.
@@ -56,7 +56,7 @@ x <- import("Microdato_Censo2017-Hogares.csv")
 Hacemos un subset para trabajar mas rápido:
 
 ```{r}
-x <- x[c(1:10000),]
+# x <- x[c(1:10000),]
 ```
 
 El código se construye uniendo los siguientes elementos de la base de datos
@@ -69,7 +69,7 @@ ZC_LOC    : Siempre debe tener tres digitos anteponiendo un cero si tiene dos y 
 ### 2 Analicemos la estructura del código de Comuna:
 
 ```{r}
-unique(x$COMUNA)
+head(unique(x$COMUNA),140)
 ```
 
 * Vemos que algunos códigos tienen 5 digitos y otros 4. <span style="color:red"> Vamos a dejar ésto inalterado </span>  . Sin embargo, añadimos un trozo de código si en el futuro se desea agregar un cero previo a las comunas de 4 dígitos para homologar.
@@ -94,7 +94,12 @@ comuna_corr <- cbind(codigos,cadena)
 * Lo verificamos
 
 ```{r}
-unique(comuna_corr$cadena)
+lko <- unique(comuna_corr$cadena)
+
+kbl(lko ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "30%", height = "300px")
 ```
 
 
@@ -210,14 +215,9 @@ kbl(codigos_unicos) %>%
 
 # Parte II: Generación de las tablas de contingencia:
 
-El Censo 2017 contempla preguntas agrupadas por el prefijo P y un número. Comenzaremos con la P07:
+El Censo 2017 contempla dos preguntas:
 
-### P07 Relación de parentesco.
-
-La categoria 19: "Persona en operativo calle" no figura en la base de datos.
-
-
-
+### 1 TIPO_HOGAR Tipo de hogar.
 
 ```{r}
 tabla_TIPO_HOGAR <- table(x$clave, x$TIPO_HOGAR, useNA = "no")
@@ -233,7 +233,7 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_TIPO_HOGAR.xlsx")
+write_xlsx(tabla, "tablas_2017_hogares/tabla_TIPO_HOGAR.xlsx")
 a001 <- head(tabla_TIPO_HOGAR,5)
 kbl(a001) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -241,10 +241,13 @@ kbl(a001) %>%
   scroll_box(width = "100%", height = "300px")
 ```
 
+### 2 TIPO_OPERATIVO Tipo de operativo.
+
+
 ```{r}
 tabla_TIPO_OPERATIVO <- table(x$clave, x$TIPO_OPERATIVO, useNA = "no")
 
-colnames(tabla_TIPO_OPERATIVO) <- c("Hogar en vivienda particular","Vivienda colectiva (no es hogar)","Operativo personas en tránsito (no es hogar)")
+colnames(tabla_TIPO_OPERATIVO) <- c("Hogar en vivienda particular","Vivienda colectiva (no es hogar)","Operativo personas en tránsito (no es hogar)","Operativo calle (no es hogar)")
 
 write.table(tabla_TIPO_OPERATIVO,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
 tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
@@ -254,42 +257,14 @@ colnames(tabla) <- tabla_names
 tabla <- tabla[-1,]
 names(tabla)[1] <- "Clave"
 
-write_xlsx(tabla, "tabla_TIPO_OPERATIVO.xlsx")
+write_xlsx(tabla, "tablas_2017_hogares/tabla_TIPO_OPERATIVO.xlsx")
 a001 <- head(tabla_TIPO_OPERATIVO,5)
 kbl(a001) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
   kable_paper() %>%
   scroll_box(width = "100%", height = "300px")
 ```
-```{r}
-write.table(tabla_TIPO_OPERATIVO,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
-tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
-# tabla <- as.table(tabla_TIPO_OPERATIVO)
-tabla_names <- tabla[1,]
-colnames(tabla) <- tabla_names
-tabla <- tabla[-1,]
-names(tabla)[1] <- "Clave"
-tabla
-```
-
-
-
-<!-- ![](imagenescenso2017/Captura2.JPG) -->
-<!-- ![](imagenescenso2017/Captura3.JPG) -->
-<!-- ![](imagenescenso2017/Captura4.JPG) -->
-<!-- ![](imagenescenso2017/Captura5.JPG) -->
-<!-- ![](imagenescenso2017/Captura6.JPG) -->
-<!-- ![](imagenescenso2017/Captura7.JPG) -->
-<!-- ![](imagenescenso2017/Captura8.JPG) -->
-<!-- ![](imagenescenso2017/Captura9.JPG) -->
-<!-- ![](imagenescenso2017/Captura10.JPG) -->
-<!-- ![](imagenescenso2017/Captura11.JPG) -->
-<!-- ![](imagenescenso2017/Captura12.JPG) -->
-<!-- ![](imagenescenso2017/Captura13.JPG) -->
-<!-- ![](imagenescenso2017/Captura14.JPG) -->
-<!-- ![](imagenescenso2017/Captura15.JPG) -->
-<!-- ![](imagenescenso2017/Captura16.JPG) -->
-<!-- ![](imagenescenso2017/Captura17.JPG) -->
 <br>
 
+<hr style="height:1px;border-width:1;color:Gray;background-color:Gray">
 
