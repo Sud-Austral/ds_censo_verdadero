@@ -1,0 +1,490 @@
+---
+title: Análisis de frecuencias en el Censo de Viviendas 2017 de Chile
+author:
+- name: VE-CC-CF
+  affiliation: DataIntelligence
+subtitle: | 
+
+date: "Miércoles 02-06-2021"
+
+abstract: |
+  Construímos un código para los registros, tablas de contingencia básicas para las preguntas del Censo para viviendas del 2017 y algunos ejercicios sobre algunas comunas.
+ 
+header-includes:
+   - \usepackage[]{babel}
+
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(leaflet)
+library(writexl)
+library(rgee)
+library(mapedit) # (OPTIONAL) Interactive editing of vector data
+library(raster)  # Manipulate raster data
+library(scales)  # Scale functions for visualization
+library(cptcity)  # cptcity color gradients!
+#library(tmap)    # Thematic Map Visualization <3
+library(kableExtra)
+library(slickR)
+library(ggiraph)
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(sf)
+library(raster)
+library(sp)
+library(rgdal)
+```
+
+# Parte I: Construcción de la clave
+
+### 1 Se lee el microdato Censo 2017 csv con la función import de la librería rio. 
+
+
+```{r}
+library("rio")
+x <- import("Microdato_Censo2017-Viviendas.csv")
+```
+
+Hacemos un subset para trabajar mas rápido:
+
+```{r}
+# x <- x[c(1:10000),]
+```
+
+El código se construye uniendo los siguientes elementos de la base de datos
+
+COMUNA    : Se mantiene igual.
+DC        : Siempre debe tener dos digitos anteponiendo un cero si tiene uno.
+AREA      : Se mantiene igual.
+ZC_LOC    : Siempre debe tener tres digitos anteponiendo un cero si tiene dos y dos si tiene uno.
+
+### 2 Analicemos la estructura del código de Comuna:
+
+```{r}
+unique(x$COMUNA)
+```
+
+* Vemos que algunos códigos tienen 5 digitos y otros 4. <span style="color:red"> Vamos a dejar ésto inalterado </span>  . Sin embargo, añadimos un trozo de código si en el futuro se desea agregar un cero previo a las comunas de 4 dígitos para homologar.
+
+```{r}
+# recogemos el campo Comuna:
+codigos <- x$COMUNA
+# construimos una secuencia llamada rango del 1 al total de filas del dataset:
+rango <- seq(1:nrow(x))
+# Creamos un string que agrega un cero a todos los registros:
+cadena<- paste("0",codigos[rango], sep = "")
+
+# El string cadena tiene o 5 o 6 digitos, los cuales siempre deben ser siempre 5 agregandole un cero al inicio de los que tienen 4.
+# Para ello extraemos un substring de la cadena sobre todas las filas (rangos) comenzando desde el primero o el segundo y llegando siempre al 6.
+
+cadena <- substr(cadena,(nchar(cadena)[rango])-(4),6)
+codigos <- as.data.frame(codigos)
+cadena <- as.data.frame(cadena)
+comuna_corr <- cbind(codigos,cadena)
+```
+
+* Lo verificamos
+
+```{r}
+unique(comuna_corr$cadena)
+```
+
+
+
+### 3 Analicemos la estructura del código de DC:
+
+
+```{r}
+unique(x$DC)
+```
+
+Debemos agregar un cero a la izquierda a todos los códigos DC que contengan un dígito:
+
+```{r}
+# Le asignamos a la variable codigos, la variable DC del dataframe x:
+codigos <- x$DC
+
+# Creamos una secuencia llamada rango con toda la cantidad de registros del dataframe:
+rango <- seq(1:nrow(x))
+
+# Creamos un string que añade un cero a todos los codigos quedando algunos con dos dígitos y otros con tres: 
+cadena <- paste("0",codigos[rango], sep = "")
+
+# Ésta es la línea más importante del código. 
+# Si el string entrante contiene tres digitos, la función substr comenzaría desde la posición 2 a la 3, y si tiene 2, comenzaría desde la posición 1 a la 3, pero como no existe posición tres, llega a la 2.
+
+cadena <- substr(cadena,(nchar(cadena)[rango])-(1),(nchar(cadena)[rango]))
+
+codigos <- as.data.frame(codigos)
+cadena <- as.data.frame(cadena)
+dc <- cbind(codigos,cadena)
+
+```
+
+* Lo verificamos
+
+```{r}
+unique(dc$cadena)
+```
+
+### 4 Analicemos la estructura del código de zc_loc:
+
+```{r}
+a002 <- unique(x$ZC_LOC)
+
+kbl(a002) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "30%", height = "300px")
+```
+
+Deben todos los codigos poseer tres dígitos, agregándole un cero a los que tienen 2 y dos ceros a los que tienen uno.
+
+```{r}
+codigos <- x$ZC_LOC
+rango <- seq(1:nrow(x))
+cadena<- paste("00",codigos[rango], sep = "")
+cadena <- substr(cadena,(nchar(cadena)[rango])-(2),nchar(cadena)[rango])
+codigos <- as.data.frame(codigos)
+cadena <- as.data.frame(cadena)
+cadena_c <- cbind(codigos,cadena)
+
+```
+
+#### 6 lo verificamos
+
+
+```{r}
+unique(cadena_c$cadena)
+```
+
+
+
+### 7 Unimos nuestra nueva clave a nuestro dataframe original con el nombre de campo clave:
+
+```{r}
+x$clave <- paste(x$COMUNA, dc$cadena, x$AREA,  cadena_c$cadena, sep="")
+```
+
+* Verificamos
+
+Recordemos que:
+
+COMUNA    : Se mantiene igual.\
+DC        : Siempre debe tener dos digitos anteponiendo un cero si tiene uno.\
+AREA      : Se mantiene igual.\
+ZC_LOC    : Siempre debe tener tres digitos anteponiendo un cero si tiene dos y dos si tiene uno.\
+
+```{r}
+tablamadre <- head(x,50)
+
+kbl(tablamadre) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+
+```{r}
+unicas <- unique(x$clave)
+codigos_unicos <- head(unicas,50)
+
+kbl(codigos_unicos) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+<br>
+<hr style="height:1px;border-width:1;color:Gray;background-color:Gray">
+
+
+# Parte II: Generación de las tablas de contingencia:
+
+El Censo 2017 de vivienda contempla preguntas agrupadas por el prefijo P y un número. Comenzaremos con la P01:
+
+### P01 Tipo de vivienda.
+
+```{r}
+tabla_P01 <- table(x$clave, x$P01, useNA = "no")
+
+colnames(tabla_P01) <- c("Casa","Departamento en edificio","Vivienda tradicional indígena (ruka, pae pae u otras)","Pieza en casa antigua o en conventillo","Mediagua, mejora, rancho o choza","Móvil (carpa, casa rodante o similar)","Otro tipo de vivienda particular","Vivienda colectiva
+","Operativo personas en tránsito (no es vivienda)","Operativo calle (no es vivienda)")
+
+write.table(tabla_P01,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_P01.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### P02 Ocupación de la vivienda.
+
+```{r}
+tabla_P02 <- table(x$clave, x$P02, useNA = "no")
+
+colnames(tabla_P02) <- c("Con moradores presentes","Con moradores ausentes","En venta, para arriendo, abandonada u otro","De temporada (vacacional u otro)")
+
+write.table(tabla_P02,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_P02.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### P03A Material de los muros exteriores.
+
+```{r}
+tabla_P03A <- table(x$clave, x$P03A, useNA = "no")
+
+colnames(tabla_P03A) <- c("Hormigón armado","Albañilería: bloque de cemento, piedra o ladrillo","Tabique forrado por ambas caras (madera o acero)","Tabique sin forro interior (madera u otro)","Adobe, barro, quincha, pirca u otro artesanal tradicional","Materiales precarios (lata, cartón, plástico, etc.)","No aplica","Missing")
+
+write.table(tabla_P03A,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_P03A.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### P03B Material en la cubierta del techo.
+
+```{r}
+tabla_P03B <- table(x$clave, x$P03B, useNA = "no")
+
+colnames(tabla_P03B) <- c("Tejas o tejuelas de arcilla, metálicas, de cemento, de madera, asfálticas o plásticas","Losa hormigón","Planchas metálicas de zinc, cobre, etc. o fibrocemento (tipo pizarreño)","Fonolita o plancha de fieltro embreado","Paja, coirón, totora o caña","Materiales precarios (lata, cartón, plásticos, etc.)","Sin cubierta sólida de techo","No aplica","Missing")
+
+write.table(tabla_P03B,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_P03B.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### P03C Material de construcción del piso.
+
+```{r}
+tabla_P03C <- table(x$clave, x$P03C, useNA = "no")
+
+colnames(tabla_P03C) <- c("Parquet, piso flotante, cerámico, madera, alfombra, flexit, cubrepiso u otro similar, sobre radier o vigas de madera","Radier sin revestimiento","Baldosa de cemento","Capa de cemento sobre tierra","Tierra","No aplica","Missing")
+
+write.table(tabla_P03C,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_P03C.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "500px")
+```
+
+### P04 Número de piezas usadas exclusivamente como dormitorio.
+
+```{r}
+tabla_P04 <- table(x$clave, x$P04, useNA = "no")
+
+colnames(tabla_P04) <- c("0 piezas","1 piezas","2 piezas","3 piezas","4 piezas","5 piezas","6 piezas","No aplica","Missing")
+
+write.table(tabla_P04,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_P04.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### P05 Origen del agua.
+
+```{r}
+tabla_P05 <- table(x$clave, x$P05, useNA = "no")
+
+colnames(tabla_P05) <- c("Red pública","Pozo o noria","Camión aljibe","Río, vertiente, estero, canal, lago, etc.","No aplica","Missing")
+
+write.table(tabla_P05,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_P05.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### CANT_HOG Cantidad de hogares.
+
+98: No aplica
+
+```{r}
+tabla_CANT_HOG <- table(x$clave, x$CANT_HOG, useNA = "no")
+
+write.table(tabla_CANT_HOG,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_CANT_HOG.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+### CANT_PER Cantidad de personas.
+
+```{r}
+tabla_CANT_PER <- table(x$clave, x$CANT_PER, useNA = "no")
+
+# colnames(tabla_CANT_PER) <- c("0","1","2","3","4","5","6","No aplica")
+
+write.table(tabla_CANT_PER,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_CANT_PER.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+<br>
+<hr style="height:1px;border-width:1;color:Gray;background-color:Gray">
+
+### REGION_15R Códigos regiones a 15 regiones.
+
+Variable de identificación geográfica.
+
+```{r}
+tabla_REGION_15R <- table(x$clave, x$REGION_15R, useNA = "no")
+
+write.table(tabla_REGION_15R,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_REGION_15R.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+<br>
+<hr style="height:1px;border-width:1;color:Gray;background-color:Gray">
+
+### PROVINCIA_15R Códigos provincias a 15 regiones.
+
+Variable de identificación geográfica.
+
+```{r}
+tabla_PROVINCIA_15R <- table(x$clave, x$PROVINCIA_15R, useNA = "no")
+
+write.table(tabla_PROVINCIA_15R,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_PROVINCIA_15R.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+
+<br>
+<hr style="height:1px;border-width:1;color:Gray;background-color:Gray">
+
+### COMUNA_15R Códigos comunas a 15 regiones.
+
+Variable de identificación geográfica.
+
+```{r}
+tabla_COMUNA_15R <- table(x$clave, x$COMUNA_15R, useNA = "no")
+
+write.table(tabla_COMUNA_15R,"tabla_TIPO_OPERATIVO_df.txt", col.name = NA)
+tabla <- read.table("tabla_TIPO_OPERATIVO_df.txt")
+tabla_names <- tabla[1,]
+colnames(tabla) <- tabla_names
+tabla <- tabla[-1,]
+names(tabla)[1] <- "Clave"
+
+write_xlsx(tabla, "tablas_2017_viviendas/tabla_COMUNA_15R.xlsx")
+a001 <- head(tabla,50)
+kbl(a001) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  kable_paper() %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
