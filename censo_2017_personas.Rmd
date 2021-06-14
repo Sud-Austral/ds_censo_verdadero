@@ -183,6 +183,14 @@ DC        : Siempre debe tener dos digitos anteponiendo un cero si tiene uno.\
 AREA      : Se mantiene igual.\
 ZC_LOC    : Siempre debe tener tres digitos anteponiendo un cero si tiene dos y dos si tiene uno.\
 
+
+```{r}
+saveRDS(x, "../ds_corr_censo_casen/censo_personas_con_clave_17.rds")
+```
+
+
+
+
 ```{r}
 tablamadre <- head(x,50)
 
@@ -190,6 +198,8 @@ kbl(tablamadre) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
   kable_paper() %>%
   scroll_box(width = "100%", height = "300px")
+
+
 ```
 
 Observemos algunas claves:
